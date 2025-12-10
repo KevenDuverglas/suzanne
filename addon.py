@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Suzanne Assistant ",
     "author": "Keven Michel Duverglas",
-    "version": (1, 5, 0),
+    "version": (1,7, 0),
     "blender": (3, 0, 0),
     "location": "View3D > N-Panel > Suzanne",
     "description": "Chat with OpenAI and transcribe audio files.",
