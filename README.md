@@ -1,77 +1,142 @@
-# Suzanne Assistant for Blender
+# Suzanne Voice Assistant (Blender Add-on)
 
-Suzanne Assistant is an in-viewport helper for Blender that lets you:
+Suzanne Voice Assistant is a Blender sidebar add-on for Blender-focused text and voice help.
 
-- 💬 Chat with OpenAI directly inside the 3D View
-- 🎙️ Transcribe audio files to text
-- 🔁 Automatically send that transcription to the chat model and show the answer
+Current version: `1.8.0`  
+Blender target: `3.0+`  
+Panel location: `3D Viewport > N-Panel > Suzanne`
 
-Everything lives in the **N-panel** in the 3D View, so you never have to leave Blender while you’re working.
+## What It Does
 
----
+- Sends typed prompts to OpenAI from inside Blender.
+- Records voice with one microphone toggle button (start/stop on press).
+- Transcribes audio and sends the transcript to the chat model automatically.
+- Optionally attaches the last 100 lines of Blender Info history.
+- Stores local conversation history and can include recent turns as context.
+- Keeps responses Blender-only by design.
 
-## Features
+## Main UI Sections
 
-- **Blender-native UI**
-  - Panel location: `View3D > N-Panel > Suzanne`
-  - Works in Blender **3.0+**
-
-- **Chat with OpenAI**
-  - Type any question in the **Prompt** field
-  - Get short, clear, step-by-step answers from “Suzanne”
-  - Model is configurable (e.g. `gpt-4o-mini`, `gpt-4o`)
-
-- **Audio → Text → Answer**
-  - Pick an audio file (`.wav`, `.mp3`, `.m4a`, `.webm`)
-  - Transcribe using `gpt-4o-mini-transcribe` or `whisper-1`
-  - The transcript is:
-    - Saved into the Prompt box, and
-    - Automatically sent to the chat model
-  - The panel shows both the transcript (preview) and Suzanne’s answer
-
-- **User-friendly error messages**
-  - Quota / 429 errors
-  - Invalid / missing API key
-  - Network timeouts
-  - All reported directly in the panel
-
-- **Local API key storage**
-  - API key is stored in the **.blend file only**
-  - Alternatively, you can use the `OPENAI_API_KEY` environment variable
-
----
+- `Status`: current state (`Idle`, `Recording`, `Sending`, error states).
+- `Ask`: text prompt input + send button.
+- `Voice`: one `Microphone` button to toggle recording ON/OFF.
+- `Context`:
+  - `Use Conversation Context`
+  - `Context Turns`
+  - `Include Info History (100 lines)`
+- `Conversation`: select/create/rename/delete local conversations.
+- `Latest Output`: switch between transcript and response previews.
 
 ## Requirements
 
-- **Blender**: 3.0 or newer  
-- **Python**: Uses Blender’s bundled Python (no separate install required)  
-- **Python Libraries**
-  - [`openai` Python SDK (1.x)](https://pypi.org/project/openai/)
-    - The add-on uses the `OpenAI` client from `openai>=1.0.0`.
+- Blender `3.0` or newer.
+- Internet connection.
+- Valid OpenAI API key.
+- Recording backend:
+  - Linux/Windows: `ffmpeg` available on `PATH`.
+  - macOS: bundled `atunc` binary in `suzanne/atunc/atunc` (if missing, voice recording will fail).
 
-`bpy`, `os`, and the other standard modules are already available inside Blender.
+No external Python package install is required for this version. The add-on uses standard library HTTP calls (`urllib`) and Blender APIs.
 
----
+## Install
 
-## Installing the OpenAI Python Library
+### Option 1: Install from GitHub ZIP (recommended)
 
-Suzanne Assistant expects the `openai` package to be installed in **Blender’s Python**, not your system Python.
+1. Open the GitHub repository page for this add-on.
+2. Click `Code > Download ZIP`.
+3. In Blender, go to `Edit > Preferences > Add-ons > Install...`
+4. Select the downloaded GitHub ZIP file (do not unzip it first).
+5. Enable `Suzanne Voice Assistant`.
 
-### Option 1 – Install from a terminal
+Expected structure in the downloaded ZIP:
 
-1. Find Blender’s Python executable:
-   - Open Blender → **Scripting** workspace.
-   - In the Python console, run:
+```text
+<repo-name>-main/
+  __init__.py
+  common.py
+  operators.py
+  panel.py
+  preferences.py
+  state.py
+```
 
-     ```python
-     import sys
-     print(sys.executable)
-     ```
+### Option 2: Install from folder (development)
 
-   - Copy that path (for example: `/path/to/blender/3.6/python/bin/python`).
+1. Copy the `suzanne` folder into Blender add-ons directory:
+   - Linux: `~/.config/blender/<version>/scripts/addons/`
+   - Windows: `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\`
+   - macOS: `~/Library/Application Support/Blender/<version>/scripts/addons/`
+2. Restart Blender.
+3. Enable `Suzanne Voice Assistant` in Add-ons.
 
-2. In your system terminal, run:
+## First-Time Setup
 
-   ```bash
-   "<path-you-copied>" -m ensurepip --upgrade
-   "<path-you-copied>" -m pip install "openai>=1.0.0,<2.0.0"
+1. Open add-on preferences.
+2. Paste your OpenAI API key.
+3. Choose:
+   - `ChatGPT Model` (default usually `gpt-4o-mini`)
+   - `Transcription Model` (default usually `gpt-4o-mini-transcribe`)
+4. Run diagnostics buttons:
+   - `Test API Key`
+   - `Test Microphone`
+   - `Test Transcription`
+
+## Daily Usage
+
+### Text workflow
+
+1. Type question in `Ask`.
+2. Optional: enable `Include Info History (100 lines)` in `Context`.
+3. Click `Send Message`.
+
+### Voice workflow
+
+1. Click `Microphone` to start recording.
+2. Click again to stop recording.
+3. Add-on transcribes audio and sends it automatically.
+4. Read result under `Latest Output`.
+
+## Local Data Storage
+
+Conversation file:
+
+- Primary location: `<addon_folder>/data/suzanne_conversations.json`
+- Fallback location if add-on folder is not writable: `/tmp/suzanne_va_data/suzanne_conversations.json` (platform temp dir)
+
+Recordings folder:
+
+- Primary location: `<addon_folder>/recordings`
+- Fallback location if add-on folder is not writable: platform temp dir `suzanne_va_recordings`
+
+## Troubleshooting
+
+### "Missing OpenAI API key"
+
+- Add your key in add-on preferences.
+- Use `Test API Key` to verify.
+
+### Microphone test fails on Linux/Windows
+
+- Confirm `ffmpeg` is installed and available on PATH:
+  - `ffmpeg -version`
+- Restart Blender after installing.
+
+### Microphone fails on macOS
+
+- Confirm `suzanne/atunc/atunc` exists and is executable.
+
+### No useful transcript returned
+
+- Try a different transcription model.
+- Check mic input level and recording permissions.
+- Keep recordings a little longer before stopping.
+
+### Conversation history does not persist
+
+- Check filesystem write permissions to add-on folder.
+- Look in fallback temp path if needed.
+
+## Privacy Notes
+
+- Prompts, transcripts, and attached context are sent to OpenAI API when you send requests.
+- Conversation history and recordings are stored locally on your machine.
