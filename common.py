@@ -33,6 +33,7 @@ _RESPONSE_PREVIEW_LINES = 12
 _NO_CONVERSATION_ID = "__none__"
 _CONVERSATION_FILE_NAME = "suzanne_conversations.json"
 _CONVERSATION_MESSAGE_CHAR_LIMIT = 500
+_FFMPEG_ENV_VAR = "SUZANNE_FFMPEG_PATH"
 ADDON_MODULE = (__package__.split(".")[0] if __package__ else __name__.split(".")[0])
 
 # ---------------------------- utils ----------------------------
@@ -79,6 +80,37 @@ def _preview_response_lines(text, width=80, max_lines=10, expanded=False):
     if expanded or not needs_toggle:
         return full_lines, needs_toggle
     return full_lines[:max_lines], needs_toggle
+
+def _bundled_ffmpeg_candidates():
+    bin_dir = _addon_dir() / "bin"
+    os_platform = platform.system()
+    if os_platform == "Windows":
+        return [
+            bin_dir / "windows" / "ffmpeg.exe",
+            bin_dir / "ffmpeg.exe",
+        ]
+    if os_platform == "Darwin":
+        return [
+            bin_dir / "macos" / "ffmpeg",
+            bin_dir / "ffmpeg",
+        ]
+    return [
+        bin_dir / "linux" / "ffmpeg",
+        bin_dir / "ffmpeg",
+    ]
+
+def _resolve_ffmpeg_path():
+    override = str(os.environ.get(_FFMPEG_ENV_VAR, "") or "").strip().strip('"')
+    if override:
+        override_path = pathlib.Path(override)
+        if override_path.exists():
+            return str(override_path)
+
+    for candidate in _bundled_ffmpeg_candidates():
+        if candidate.exists():
+            return str(candidate)
+
+    return shutil.which("ffmpeg")
 
 def _set_enum_items_cache(cache, items):
     # Blender can crash if enum callbacks return short-lived Python strings.
@@ -416,7 +448,7 @@ def _get_audio_devices_linux():
     return items
 
 def _get_audio_devices_windows():
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _resolve_ffmpeg_path()
     if not ffmpeg:
         return [("default", "default", "default")]
     try:
@@ -531,10 +563,16 @@ def _microphone_probe_candidates(ffmpeg_path, output_path):
             [ffmpeg_path, "-nostdin", "-f", "pulse", "-i", "default"] + common_tail,
         ]
     if os_platform == "Windows":
-        return [
+        candidates = [
             [ffmpeg_path, "-nostdin", "-f", "wasapi", "-i", "default"] + common_tail,
             [ffmpeg_path, "-nostdin", "-f", "dshow", "-i", "audio=default"] + common_tail,
         ]
+        fallback_device = _first_non_default_audio_device(_get_audio_devices_windows())
+        if fallback_device:
+            candidates.append(
+                [ffmpeg_path, "-nostdin", "-f", "dshow", "-i", f"audio={fallback_device}"] + common_tail
+            )
+        return candidates
     return [
         [ffmpeg_path, "-nostdin", "-f", "alsa", "-i", "default"] + common_tail,
     ]
@@ -550,9 +588,9 @@ def _run_microphone_probe():
             return False, "No macOS audio devices were detected."
         return True, f"atunc found with {len(devices)} detected device(s)."
 
-    ffmpeg_path = shutil.which("ffmpeg")
+    ffmpeg_path = _resolve_ffmpeg_path()
     if not ffmpeg_path:
-        return False, "ffmpeg is not installed or not on PATH."
+        return False, "ffmpeg is unavailable. Bundle ffmpeg with Suzanne or install it on PATH."
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
         probe_path = handle.name

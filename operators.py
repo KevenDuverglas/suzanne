@@ -12,7 +12,7 @@ class SUZANNEVA_OT_microphone_press(Operator):
     recording_path = ""
 
     def _ffmpeg_path(self):
-        return shutil.which("ffmpeg")
+        return _resolve_ffmpeg_path()
 
     def _atunc_path(self):
         candidate = _addon_dir() / "atunc" / "atunc"
@@ -97,7 +97,7 @@ class SUZANNEVA_OT_microphone_press(Operator):
         else:
             ffmpeg_path = self._ffmpeg_path()
             if not ffmpeg_path:
-                self.report({'ERROR'}, "ffmpeg not found. Install ffmpeg to record.")
+                self.report({'ERROR'}, "ffmpeg unavailable. Bundle it with Suzanne or install it on PATH.")
                 return False
 
             if os_platform == "Linux":

@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Suzanne Voice Assistant",
     "author": "Keven Michel Duverglas",
-    "version": (1, 8, 2),
+    "version": (1, 8, 3),
     "blender": (5, 0, 0),
     "location": "3D Viewport > N-Panel > Suzanne VA",
     "description": "Blender-focused chat + voice assistant with local conversation memory and context tools.",

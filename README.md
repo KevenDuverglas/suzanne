@@ -2,7 +2,7 @@
 
 Suzanne Voice Assistant is a Blender sidebar add-on for Blender-focused text and voice help.
 
-Current version: `1.8.2`  
+Current version: `1.8.3`  
 Blender target: `5.0.0+`  
 Panel location: `3D Viewport > N-Panel > Suzanne`
 
@@ -33,7 +33,8 @@ Panel location: `3D Viewport > N-Panel > Suzanne`
 - Internet connection.
 - Valid OpenAI API key.
 - Recording backend:
-  - Linux/Windows: `ffmpeg` available on `PATH`.
+  - Windows: bundled `ffmpeg.exe` inside `suzanne/bin/windows/ffmpeg.exe` (falls back to `PATH` if missing).
+  - Linux: `ffmpeg` available on `PATH`.
   - macOS: bundled `atunc` binary in `suzanne/atunc/atunc` (if missing, voice recording will fail).
 
 No external Python package install is required for this version. The add-on uses standard library HTTP calls (`urllib`) and Blender APIs.
@@ -118,7 +119,11 @@ Recordings folder:
 
 ### Microphone test fails on Linux/Windows
 
-- Confirm `ffmpeg` is installed and available on PATH:
+- Windows:
+  - Confirm `suzanne/bin/windows/ffmpeg.exe` exists in the installed add-on.
+  - Optional override: set environment variable `SUZANNE_FFMPEG_PATH` to a specific `ffmpeg.exe`.
+- Linux:
+  - Confirm `ffmpeg` is installed and available on `PATH`:
   - `ffmpeg -version`
 - Restart Blender after installing.
 

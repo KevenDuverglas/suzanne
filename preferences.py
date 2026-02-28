@@ -53,6 +53,7 @@ class SUZANNEVA_Preferences(AddonPreferences):
         layout = self.layout
         os_name = _os_display_name()
         layout.label(text="Compatible with Blender 5.0.0 and newer")
+        layout.label(text="Windows builds use bundled ffmpeg when available")
         layout.label(text=f"Recording Settings ({os_name})")
         layout.label(text=f"Microphone: System Default ({os_name})")
         layout.prop(self, "file_prefix")
