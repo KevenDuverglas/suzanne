@@ -1,7 +1,46 @@
+from bpy.props import CollectionProperty
+from bpy.types import PropertyGroup
+
 from .common import *  # noqa: F403,F401
 
 # --------------------------- state -----------------------------
 # Use Scene properties (reliable & per-file). No WindowManager quirks.
+
+_SCENE_PROP_NAMES = (
+    "suzanne_va_mic_active",
+    "suzanne_va_status",
+    "suzanne_va_last_audio",
+    "suzanne_va_last_transcript",
+    "suzanne_va_last_response",
+    "suzanne_va_prompt",
+    "suzanne_va_active_conversation",
+    "suzanne_va_use_conversation_context",
+    "suzanne_va_context_turns",
+    "suzanne_va_include_info_history",
+    "suzanne_va_last_info_history",
+    "suzanne_va_show_message",
+    "suzanne_va_show_context",
+    "suzanne_va_show_conversation",
+    "suzanne_va_show_recording",
+    "suzanne_va_show_output",
+    "suzanne_va_output_view",
+    "suzanne_va_expand_transcript",
+    "suzanne_va_expand_response",
+    "suzanne_va_conversation_preview",
+    "suzanne_va_conversation_preview_index",
+)
+
+
+class SUZANNEVA_PG_conversation_preview_item(PropertyGroup):
+    label: StringProperty(
+        name="Conversation Preview Line",
+        default="",
+    )
+    is_placeholder: BoolProperty(
+        name="Placeholder Row",
+        default=False,
+    )
+
 
 def ensure_props():
     sc = bpy.types.Scene
@@ -118,3 +157,21 @@ def ensure_props():
             name="Expand Response",
             default=False,
         )
+    if not hasattr(sc, "suzanne_va_conversation_preview"):
+        sc.suzanne_va_conversation_preview = CollectionProperty(
+            name="Conversation Preview",
+            type=SUZANNEVA_PG_conversation_preview_item,
+        )
+    if not hasattr(sc, "suzanne_va_conversation_preview_index"):
+        sc.suzanne_va_conversation_preview_index = IntProperty(
+            name="Conversation Preview Index",
+            default=0,
+            min=0,
+        )
+
+
+def clear_props():
+    sc = bpy.types.Scene
+    for prop_name in _SCENE_PROP_NAMES:
+        if hasattr(sc, prop_name):
+            delattr(sc, prop_name)

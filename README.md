@@ -2,7 +2,7 @@
 
 Suzanne Voice Assistant is a Blender sidebar add-on for Blender-focused text and voice help.
 
-Current version: `1.8.3`  
+Current version: `1.8.5`  
 Blender target: `5.0.0+`  
 Panel location: `3D Viewport > N-Panel > Suzanne`
 
@@ -13,19 +13,21 @@ Panel location: `3D Viewport > N-Panel > Suzanne`
 - Transcribes audio and sends the transcript to the chat model automatically.
 - Optionally attaches the last 100 lines of Blender Info history.
 - Stores local conversation history and can include recent turns as context.
+- Uses Blender-native collapsible sections for a cleaner panel layout.
+- Shows recent conversation lines in a native list view with built-in empty states.
 - Keeps responses Blender-only by design.
 
 ## Main UI Sections
 
-- `Status`: current state (`Idle`, `Recording`, `Sending`, error states).
+- `Status`: live state bar (`Ready`, `Recording...`, `Sending...`, `Error`).
 - `Ask`: text prompt input + send button.
 - `Voice`: one `Microphone` button to toggle recording ON/OFF.
 - `Context`:
   - `Use Conversation Context`
   - `Context Turns`
   - `Include Info History (100 lines)`
-- `Conversation`: select/create/rename/delete local conversations.
-- `Latest Output`: switch between transcript and response previews.
+- `Conversation`: select/create/rename/delete local conversations with a native preview list.
+- `Latest Output`: switch between transcript and response previews, with a helper message when empty.
 
 ## Requirements
 
@@ -54,6 +56,7 @@ Expected structure in the downloaded ZIP:
 ```text
 <repo-name>-main/
   __init__.py
+  bin/
   common.py
   operators.py
   panel.py
@@ -73,7 +76,7 @@ Expected structure in the downloaded ZIP:
 ## First-Time Setup
 
 1. Open add-on preferences.
-2. Confirm the compatibility note shows `Compatible with Blender 5.0.0 and newer`.
+2. Confirm the preferences panel shows `Suzanne Version 1.8.5` and `Compatible with Blender 5.0.0 and newer`.
 3. Paste your OpenAI API key.
 4. Choose:
    - `ChatGPT Model` (default usually `gpt-4o-mini`)

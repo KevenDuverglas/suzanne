@@ -52,6 +52,7 @@ class SUZANNEVA_Preferences(AddonPreferences):
     def draw(self, _context):
         layout = self.layout
         os_name = _os_display_name()
+        layout.label(text="Suzanne Version 1.8.5")
         layout.label(text="Compatible with Blender 5.0.0 and newer")
         layout.label(text="Windows builds use bundled ffmpeg when available")
         layout.label(text=f"Recording Settings ({os_name})")

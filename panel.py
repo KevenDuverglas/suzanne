@@ -1,3 +1,5 @@
+from bpy.types import UIList
+
 from .common import *  # noqa: F403,F401
 from .operators import (  # noqa: F401
     SUZANNEVA_OT_send_message,
@@ -8,6 +10,36 @@ from .operators import (  # noqa: F401
 )
 
 # ----------------------------- panel ---------------------------
+
+
+class SUZANNEVA_UL_conversation_preview(UIList):
+    bl_idname = "SUZANNEVA_UL_conversation_preview"
+
+    def draw_item(
+        self,
+        _context,
+        layout,
+        _data,
+        item,
+        _icon,
+        _active_data,
+        _active_propname,
+        _index=0,
+        _flt_flag=0,
+    ):
+        if self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='TEXT')
+            return
+
+        row = layout.row(align=True)
+        if item.is_placeholder:
+            row.enabled = False
+            row.label(text=item.label, icon='INFO')
+            return
+
+        row.label(text=item.label, icon='TEXT')
+
 
 class SUZANNEVA_PT_sidebar(Panel):
     bl_label = "Suzanne Voice Assistant"
@@ -25,122 +57,204 @@ class SUZANNEVA_PT_sidebar(Panel):
         is_on = context.scene.suzanne_va_mic_active
         layout.label(icon='REC' if is_on else 'MUTE_IPO_OFF')
 
+    def _status_presentation(self, scene, is_recording):
+        raw_status = (scene.suzanne_va_status or "").strip() or "Idle"
+        normalized = raw_status.lower()
+        if is_recording:
+            return (
+                "Recording...",
+                "Microphone is live. Click the button again to stop and send.",
+                'REC',
+                False,
+            )
+        if "error" in normalized:
+            return ("Error", raw_status, 'ERROR', True)
+        if "sending" in normalized:
+            return (
+                "Sending...",
+                "Suzanne is preparing a Blender-focused reply.",
+                'TIME',
+                False,
+            )
+        if "stopping" in normalized:
+            return (
+                "Finishing recording...",
+                "Saving audio before transcription starts.",
+                'TIME',
+                False,
+            )
+        if "sent" in normalized:
+            return (
+                "Ready",
+                "Last request finished successfully. Ask the next Blender question.",
+                'CHECKMARK',
+                False,
+            )
+        if raw_status != "Idle":
+            return ("Ready", raw_status, 'INFO', False)
+        return (
+            "Ready",
+            "Ask a Blender question or record audio to begin.",
+            'INFO',
+            False,
+        )
+
+    def _sync_conversation_preview(self, scene):
+        preview_items = scene.suzanne_va_conversation_preview
+        preview_lines = _conversation_preview_lines(
+            scene,
+            max_items=max(2, min(14, scene.suzanne_va_context_turns * 2)),
+        )
+
+        active_conversation_id = str(scene.suzanne_va_active_conversation or "").strip()
+        has_conversation = bool(active_conversation_id) and active_conversation_id != _NO_CONVERSATION_ID
+
+        if preview_lines:
+            rows = [(line, False) for line in preview_lines]
+        elif has_conversation:
+            rows = [("No saved messages yet. Start by asking a question.", True)]
+        else:
+            rows = [("No conversation yet. Create one or send a prompt.", True)]
+
+        while len(preview_items) > len(rows):
+            preview_items.remove(len(preview_items) - 1)
+
+        for index, (label, is_placeholder) in enumerate(rows):
+            if index >= len(preview_items):
+                item = preview_items.add()
+            else:
+                item = preview_items[index]
+            item.label = label
+            item.is_placeholder = is_placeholder
+
+        if scene.suzanne_va_conversation_preview_index >= len(preview_items):
+            scene.suzanne_va_conversation_preview_index = max(0, len(preview_items) - 1)
+
     def _draw_status_card(self, layout, scene, is_recording):
-        status_text, status_icon, status_alert = _status_visual(scene.suzanne_va_status, is_recording)
+        title, detail, icon_name, is_alert = self._status_presentation(scene, is_recording)
         status_box = layout.box()
-        status_row = status_box.row(align=True)
-        status_row.alert = status_alert
-        status_row.scale_y = 1.05
-        status_row.label(text=f" {status_text}", icon=status_icon)
+
+        header_row = status_box.row(align=True)
+        header_row.alert = is_alert
+        header_row.scale_y = 1.1
+        header_row.label(text=title, icon=icon_name)
+
+        detail_col = status_box.column(align=True)
+        for line in _wrap_ui_text(detail, width=42):
+            detail_col.label(text=line)
+
         layout.separator()
 
     def _draw_ask_card(self, layout, scene):
-        ask_box = layout.box()
-        if _draw_section_header(
-            ask_box,
-            scene,
-            "suzanne_va_show_message",
-            "Ask",
-            'OUTLINER_OB_SPEAKER',
-        ):
-            ask_col = ask_box.column(align=True)
-            ask_col.prop(scene, "suzanne_va_prompt", text="")
-            send_row = ask_col.row(align=True)
-            send_row.scale_y = 1.05
-            send_row.operator(SUZANNEVA_OT_send_message.bl_idname, icon='FORWARD')
+        header, body = layout.panel_prop(scene, "suzanne_va_show_message")
+        header.label(text="Ask", icon='OUTLINER_OB_SPEAKER')
+        if body is None:
+            layout.separator()
+            return
+
+        ask_col = body.column(align=True)
+        ask_col.prop(scene, "suzanne_va_prompt", text="")
+        if not (scene.suzanne_va_prompt or "").strip():
+            hint_row = ask_col.row(align=True)
+            hint_row.enabled = False
+            hint_row.label(text="Ask a Blender question to start.", icon='INFO')
+
+        send_row = ask_col.row(align=True)
+        send_row.scale_y = 1.1
+        send_row.operator(SUZANNEVA_OT_send_message.bl_idname, icon='FORWARD')
         layout.separator()
 
     def _draw_context_card(self, layout, scene):
-        context_box = layout.box()
-        if _draw_section_header(
-            context_box,
-            scene,
-            "suzanne_va_show_context",
-            "Context",
-            'PREFERENCES',
-        ):
-            context_col = context_box.column(align=True)
-            context_col.prop(scene, "suzanne_va_use_conversation_context", text="Use Conversation Context")
-            if scene.suzanne_va_use_conversation_context:
-                context_col.prop(scene, "suzanne_va_context_turns", text="Context Turns")
-            context_col.prop(scene, "suzanne_va_include_info_history", text="Include Info History (100 lines)")
+        header, body = layout.panel_prop(scene, "suzanne_va_show_context")
+        header.label(text="Context", icon='PREFERENCES')
+        if body is None:
+            layout.separator()
+            return
+
+        context_col = body.column(align=True)
+        context_col.prop(scene, "suzanne_va_use_conversation_context", text="Use Conversation Context")
+        if scene.suzanne_va_use_conversation_context:
+            context_col.prop(scene, "suzanne_va_context_turns", text="Context Turns")
+        context_col.prop(scene, "suzanne_va_include_info_history", text="Include Info History (100 lines)")
         layout.separator()
 
     def _draw_conversation_card(self, layout, scene):
-        conversation_box = layout.box()
-        if _draw_section_header(
-            conversation_box,
+        header, body = layout.panel_prop(scene, "suzanne_va_show_conversation")
+        header.label(text="Conversation", icon='TEXT')
+        if body is None:
+            layout.separator()
+            return
+
+        conversation_col = body.column(align=True)
+        controls_row = conversation_col.row(align=True)
+        controls_row.prop(scene, "suzanne_va_active_conversation", text="")
+        controls_row.operator(SUZANNEVA_OT_new_conversation.bl_idname, text="", icon='ADD')
+
+        active_conversation_id = str(scene.suzanne_va_active_conversation or "").strip()
+        has_conversation = bool(active_conversation_id) and active_conversation_id != _NO_CONVERSATION_ID
+
+        rename_row = controls_row.row(align=True)
+        rename_row.enabled = has_conversation
+        rename_row.operator(SUZANNEVA_OT_rename_conversation.bl_idname, text="", icon='GREASEPENCIL')
+
+        delete_row = controls_row.row(align=True)
+        delete_row.enabled = has_conversation
+        delete_row.operator(SUZANNEVA_OT_delete_conversation.bl_idname, text="", icon='TRASH')
+
+        self._sync_conversation_preview(scene)
+        preview_rows = max(3, min(7, len(scene.suzanne_va_conversation_preview)))
+        conversation_col.template_list(
+            SUZANNEVA_UL_conversation_preview.bl_idname,
+            "",
             scene,
-            "suzanne_va_show_conversation",
-            "Conversation",
-            'TEXT',
-        ):
-            conversation_col = conversation_box.column(align=True)
-            controls_row = conversation_col.row(align=True)
-            controls_row.prop(scene, "suzanne_va_active_conversation", text="")
-            controls_row.operator(SUZANNEVA_OT_new_conversation.bl_idname, text="", icon='ADD')
-
-            active_conversation_id = str(scene.suzanne_va_active_conversation or "").strip()
-            has_conversation = bool(active_conversation_id) and active_conversation_id != _NO_CONVERSATION_ID
-
-            rename_row = controls_row.row(align=True)
-            rename_row.enabled = has_conversation
-            rename_row.operator(SUZANNEVA_OT_rename_conversation.bl_idname, text="", icon='GREASEPENCIL')
-
-            delete_row = controls_row.row(align=True)
-            delete_row.enabled = has_conversation
-            delete_row.operator(SUZANNEVA_OT_delete_conversation.bl_idname, text="", icon='TRASH')
-
-            conversation_col.separator()
-            preview_lines = _conversation_preview_lines(
-                scene,
-                max_items=max(2, min(14, scene.suzanne_va_context_turns * 2)),
-            )
-            if preview_lines:
-                for line in preview_lines:
-                    conversation_col.label(text=line)
-            else:
-                conversation_col.label(text="No saved messages yet.", icon='INFO')
+            "suzanne_va_conversation_preview",
+            scene,
+            "suzanne_va_conversation_preview_index",
+            rows=preview_rows,
+        )
         layout.separator()
 
     def _draw_voice_card(self, layout, scene, is_recording):
-        voice_box = layout.box()
-        if _draw_section_header(
-            voice_box,
-            scene,
-            "suzanne_va_show_recording",
-            "Voice",
-            'REC',
-        ):
-            voice_col = voice_box.column(align=True)
-            record_row = voice_col.row(align=True)
-            record_row.alert = is_recording
-            record_text = "Stop Recording" if is_recording else "Microphone"
-            record_icon = 'REC' if is_recording else 'MUTE_IPO_OFF'
-            record_row.operator(
-                SUZANNEVA_OT_microphone_press.bl_idname,
-                text=record_text,
-                icon=record_icon,
-            )
+        header, body = layout.panel_prop(scene, "suzanne_va_show_recording")
+        header.label(text="Voice", icon='REC')
+        if body is None:
+            layout.separator()
+            return
+
+        voice_col = body.column(align=True)
+        if not is_recording:
+            hint_row = voice_col.row(align=True)
+            hint_row.enabled = False
+            hint_row.label(text="Record a quick prompt and Suzanne will send it.", icon='INFO')
+
+        record_row = voice_col.row(align=True)
+        record_row.alert = is_recording
+        record_row.scale_y = 1.1
+        record_text = "Stop Recording" if is_recording else "Microphone"
+        record_icon = 'REC' if is_recording else 'MUTE_IPO_OFF'
+        record_row.operator(
+            SUZANNEVA_OT_microphone_press.bl_idname,
+            text=record_text,
+            icon=record_icon,
+        )
         layout.separator()
 
     def _draw_latest_output_card(self, layout, scene):
+        header, body = layout.panel_prop(scene, "suzanne_va_show_output")
+        header.label(text="Latest Output", icon='CHECKMARK')
+        if body is None:
+            return
+
         has_transcript = bool((scene.suzanne_va_last_transcript or "").strip())
         has_response = bool((scene.suzanne_va_last_response or "").strip())
+        output_col = body.column(align=True)
+
         if not has_transcript and not has_response:
+            empty_row = output_col.row(align=True)
+            empty_row.enabled = False
+            empty_row.label(text="No response yet. Send a prompt or record audio.", icon='INFO')
             return
 
-        output_box = layout.box()
-        if not _draw_section_header(
-            output_box,
-            scene,
-            "suzanne_va_show_output",
-            "Latest Output",
-            'CHECKMARK',
-        ):
-            return
-
-        output_col = output_box.column(align=True)
         if has_transcript and has_response:
             output_col.prop(scene, "suzanne_va_output_view", expand=True)
 
