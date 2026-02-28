@@ -22,7 +22,10 @@ import wave
 
 _SYNCING_API_KEY = False
 _MODELS_CACHE = {"ts": 0.0, "ids": []}
+_MODEL_ENUM_ITEMS_CACHE = []
+_TRANSCRIBE_ENUM_ITEMS_CACHE = []
 _AUDIO_DEVICES_CACHE = {"ts": 0.0, "items": []}
+_CONVERSATION_ENUM_ITEMS_CACHE = []
 _INFO_HISTORY_LINE_LIMIT = 100
 _SYSTEM_AUDIO_DEVICE_ID = "system_default"
 _TRANSCRIPT_PREVIEW_LINES = 8
@@ -76,6 +79,14 @@ def _preview_response_lines(text, width=80, max_lines=10, expanded=False):
     if expanded or not needs_toggle:
         return full_lines, needs_toggle
     return full_lines[:max_lines], needs_toggle
+
+def _set_enum_items_cache(cache, items):
+    # Blender can crash if enum callbacks return short-lived Python strings.
+    cache[:] = [
+        (str(identifier), str(name), str(description))
+        for identifier, name, description in items
+    ]
+    return cache
 
 def _status_visual(status_text, is_recording):
     status = (status_text or "").strip() or "Idle"
@@ -351,24 +362,20 @@ def _get_models_from_api(api_key):
         return []
 
 def _get_models_cached(api_key, force=False):
-    now = time.time()
-    if force or (now - _MODELS_CACHE["ts"] > 300):
+    if force:
         _MODELS_CACHE["ids"] = _get_models_from_api(api_key)
-        _MODELS_CACHE["ts"] = now
+        _MODELS_CACHE["ts"] = time.time()
     return list(_MODELS_CACHE["ids"])
 
 def _model_enum_items(self, context):
     prefs = _get_addon_preferences(context)
     ids = _get_models_cached(_get_effective_api_key(prefs))
-    # Ensure current selection stays available even if API fails
-    current = "gpt-4o-mini"
-    if prefs:
-        current = getattr(prefs, "response_model", "") or "gpt-4o-mini"
-    if current and current not in ids:
-        ids.insert(0, current)
     if not ids:
         ids = ["gpt-4o-mini"]
-    return [(m, m, "") for m in ids]
+    return _set_enum_items_cache(
+        _MODEL_ENUM_ITEMS_CACHE,
+        [(m, m, "") for m in ids],
+    )
 
 def _transcribe_model_enum_items(self, context):
     prefs = _get_addon_preferences(context)
@@ -377,14 +384,12 @@ def _transcribe_model_enum_items(self, context):
         m for m in ids
         if "transcribe" in m or m == "whisper-1"
     ]
-    current = "gpt-4o-mini-transcribe"
-    if prefs:
-        current = getattr(prefs, "transcription_model", "") or "gpt-4o-mini-transcribe"
-    if current and current not in transcribe_ids:
-        transcribe_ids.insert(0, current)
     if not transcribe_ids:
         transcribe_ids = ["gpt-4o-mini-transcribe", "whisper-1"]
-    return [(m, m, "") for m in transcribe_ids]
+    return _set_enum_items_cache(
+        _TRANSCRIBE_ENUM_ITEMS_CACHE,
+        [(m, m, "") for m in transcribe_ids],
+    )
 
 def _get_audio_devices_linux():
     arecord = shutil.which("arecord")
@@ -593,24 +598,19 @@ def _audio_devices_enum_items(self, context):
     os_name = _os_display_name()
     label = f"System Default ({os_name})"
 
-    items = [(
-        _SYSTEM_AUDIO_DEVICE_ID,
-        label,
-        f"Use the {os_name} default microphone (with internal fallbacks).",
-    )]
-
-    _AUDIO_DEVICES_CACHE["items"] = items
+    _AUDIO_DEVICES_CACHE["items"] = _set_enum_items_cache(
+        _AUDIO_DEVICES_CACHE["items"],
+        [(
+            _SYSTEM_AUDIO_DEVICE_ID,
+            label,
+            f"Use the {os_name} default microphone (with internal fallbacks).",
+        )],
+    )
     _AUDIO_DEVICES_CACHE["ts"] = time.time()
 
-    # Always keep preferences pinned to the single supported option.
-    try:
-        prefs = _get_addon_preferences(context)
-        if prefs and prefs.audio_input_device != _SYSTEM_AUDIO_DEVICE_ID:
-            prefs.audio_input_device = _SYSTEM_AUDIO_DEVICE_ID
-    except Exception:
-        pass
+    return _AUDIO_DEVICES_CACHE["items"]
 
-    return items
+
 def _addon_dir():
     return pathlib.Path(__file__).parent.resolve()
 
@@ -838,21 +838,7 @@ def _conversation_enum_items(self, context):
             description = f"Updated {updated_at} | {description}"
         items.append((conv_id, title, description))
 
-    current_id = ""
-    if context and getattr(context, "scene", None):
-        current_id = str(getattr(context.scene, "suzanne_va_active_conversation", "") or "").strip()
-    known_ids = {item[0] for item in items}
-    if current_id and current_id != _NO_CONVERSATION_ID and current_id not in known_ids:
-        items.insert(
-            0,
-            (
-                current_id,
-                "(Missing conversation)",
-                "Previously selected conversation was not found on disk.",
-            ),
-        )
-
-    return items
+    return _set_enum_items_cache(_CONVERSATION_ENUM_ITEMS_CACHE, items)
 
 def _conversation_context_block(scene):
     if not getattr(scene, "suzanne_va_use_conversation_context", False):

@@ -53,7 +53,7 @@ class SUZANNEVA_Preferences(AddonPreferences):
         layout = self.layout
         os_name = _os_display_name()
         layout.label(text=f"Recording Settings ({os_name})")
-        layout.label(text=f"Microphone: System Default ({os_name})", icon='SPEAKER')
+        layout.label(text=f"Microphone: System Default ({os_name})")
         layout.prop(self, "file_prefix")
         layout.separator()
 
@@ -61,19 +61,20 @@ class SUZANNEVA_Preferences(AddonPreferences):
         row = layout.row(align=True)
         if self.show_api_key:
             row.prop(self, "api_key", text="API Key")
-            row.prop(self, "show_api_key", text="", icon='HIDE_OFF')
+            row.prop(self, "show_api_key", text="Hide")
         else:
-            masked = "•" * max(8, min(32, len(self.api_key)))
+            masked = "*" * max(8, min(32, len(self.api_key)))
             row.label(text=f"API Key: {masked}")
-            row.prop(self, "show_api_key", text="", icon='HIDE_ON')
-        row.operator("suzanne_va.clear_saved_api_key", text="", icon='X')
+            row.prop(self, "show_api_key", text="Show")
+        row.operator("suzanne_va.clear_saved_api_key", text="Clear")
 
         row = layout.row(align=True)
         row.prop(self, "response_model")
-        row.operator("suzanne_va.refresh_models", text="", icon='FILE_REFRESH')
+        row.operator("suzanne_va.refresh_models", text="Refresh")
+
         row = layout.row(align=True)
         row.prop(self, "transcription_model")
-        row.operator("suzanne_va.refresh_models", text="", icon='FILE_REFRESH')
+        row.operator("suzanne_va.refresh_models", text="Refresh")
 
         layout.separator()
         layout.label(text="Conversation Storage")
@@ -81,21 +82,21 @@ class SUZANNEVA_Preferences(AddonPreferences):
 
         recordings_path = str(_recordings_dir())
         recordings_box = layout.box()
-        recordings_box.label(text="Recordings Folder", icon='FILE_FOLDER')
+        recordings_box.label(text="Recordings Folder")
         for line in _wrap_ui_text(recordings_path, width=78):
             recordings_box.label(text=line)
-        recordings_box.operator("suzanne_va.open_recordings_folder", text="Open Recordings Folder", icon='FILE_FOLDER')
+        recordings_box.operator("suzanne_va.open_recordings_folder", text="Open Recordings Folder")
 
         layout.separator()
         layout.label(text="Diagnostics")
         diag_row = layout.row(align=True)
-        diag_row.operator("suzanne_va.test_api_key", text="Test API Key", icon='CHECKMARK')
-        diag_row.operator("suzanne_va.test_microphone", text="Test Microphone", icon='REC')
-        diag_row.operator("suzanne_va.test_transcription", text="Test Transcription", icon='SPEAKER')
+        diag_row.operator("suzanne_va.test_api_key", text="Test API Key")
+        diag_row.operator("suzanne_va.test_microphone", text="Test Microphone")
+        diag_row.operator("suzanne_va.test_transcription", text="Test Transcription")
 
         if self.diagnostics_last_message:
             info_box = layout.box()
-            info_box.label(text="Last Result", icon='INFO')
+            info_box.label(text="Last Result")
             for line in _wrap_ui_text(self.diagnostics_last_message, width=78):
                 info_box.label(text=line)
 
@@ -103,7 +104,7 @@ class SUZANNEVA_Preferences(AddonPreferences):
             error_box = layout.box()
             header = error_box.row(align=True)
             header.alert = True
-            header.label(text="Last Error", icon='ERROR')
-            header.operator("suzanne_va.copy_last_error", text="", icon='COPYDOWN')
+            header.label(text="Last Error")
+            header.operator("suzanne_va.copy_last_error", text="Copy")
             for line in _wrap_ui_text(self.diagnostics_last_error, width=78):
                 error_box.label(text=line)
