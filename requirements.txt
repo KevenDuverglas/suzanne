@@ -1,0 +1,2 @@
+# Test dependency for the Suzanne addon test suite.
+pytest>=8.0
