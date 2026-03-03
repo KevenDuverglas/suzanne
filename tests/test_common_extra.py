@@ -586,3 +586,492 @@ def test_common_operator_snapshot_covers_skip_and_fallback_property_paths():
         "mesh.fallback_default(value='custom')\n"
         "mesh.no_props"
     )
+
+
+def test_common_audio_and_preference_helpers_cover_remaining_fallback_branches():
+    modules = load_suzanne_modules()
+    common = modules.common
+
+    with mock.patch.object(common, "_get_json", side_effect=RuntimeError("offline")):
+        assert common._get_models_from_api("sk-live") == []
+
+    prefs = make_preferences()
+    context = make_context(common.ADDON_MODULE, prefs=prefs)
+    with mock.patch.object(common, "_get_addon_preferences", return_value=prefs):
+        with mock.patch.object(common, "_get_models_cached", return_value=["base-model"]):
+            assert common._transcribe_model_enum_items(None, context) == [
+                ("gpt-4o-mini-transcribe", "gpt-4o-mini-transcribe", ""),
+                ("whisper-1", "whisper-1", ""),
+            ]
+
+    with mock.patch.object(common.shutil, "which", return_value="arecord"):
+        with mock.patch.object(common.subprocess, "Popen", side_effect=RuntimeError("boom")):
+            assert common._get_audio_devices_linux() == [("default", "default", "default")]
+
+    class SplitLinesOnly:
+        def __init__(self, lines):
+            self._lines = lines
+
+        def splitlines(self):
+            return self._lines
+
+    linux_proc = SimpleNamespace(
+        communicate=lambda timeout: (SplitLinesOnly([123, b" ", b"null"]), b"")
+    )
+    with mock.patch.object(common.shutil, "which", return_value="arecord"):
+        with mock.patch.object(common.subprocess, "Popen", return_value=linux_proc):
+            assert common._get_audio_devices_linux() == [("default", "default", "default")]
+
+    with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+        with mock.patch.object(common.subprocess, "Popen", side_effect=RuntimeError("boom")):
+            assert common._get_audio_devices_windows() == [("default", "default", "default")]
+
+    windows_proc = SimpleNamespace(
+        communicate=lambda timeout: (b"", SplitLinesOnly([123]))
+    )
+    with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+        with mock.patch.object(common.subprocess, "Popen", return_value=windows_proc):
+            assert common._get_audio_devices_windows() == [("default", "default", "default")]
+
+    alt_name_proc = SimpleNamespace(
+        communicate=lambda timeout: (b"", b'DirectShow audio devices\nAlternative name "alias"\n')
+    )
+    with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+        with mock.patch.object(common.subprocess, "Popen", return_value=alt_name_proc):
+            assert common._get_audio_devices_windows() == [("default", "default", "default")]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        addon_dir = pathlib.Path(tmpdir)
+        with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+            assert common._get_audio_devices_macos() == [("default", "default", "default")]
+
+        atunc_path = addon_dir / "atunc" / "atunc"
+        atunc_path.parent.mkdir(parents=True, exist_ok=True)
+        atunc_path.write_text("", encoding="utf-8")
+
+        bad_macos_proc = SimpleNamespace(communicate=lambda timeout: (b"not-json", b""))
+        with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+            with mock.patch.object(common.subprocess, "Popen", return_value=bad_macos_proc):
+                assert common._get_audio_devices_macos() == [("default", "default", "default")]
+
+        empty_macos_proc = SimpleNamespace(communicate=lambda timeout: (b"[]", b""))
+        with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+            with mock.patch.object(common.subprocess, "Popen", return_value=empty_macos_proc):
+                assert common._get_audio_devices_macos() == [("default", "default", "default")]
+
+    assert common._first_non_default_audio_device(
+        [("", "", ""), (None, "", ""), ("default", "default", "default")]
+    ) == ""
+
+    with mock.patch.object(common.platform, "system", return_value="Windows"):
+        assert common._os_display_name() == "Windows"
+
+    class BrokenContext:
+        @property
+        def preferences(self):
+            raise RuntimeError("boom")
+
+    assert common._get_addon_preferences(BrokenContext()) is None
+    assert common._get_effective_api_key(None) == ""
+    common._set_diagnostics_message(None, message="ignored", error="ignored")
+
+
+def test_common_info_history_helpers_cover_remaining_guard_branches():
+    modules = load_suzanne_modules()
+    common = modules.common
+    logs = []
+
+    class SetterLockedSpace:
+        def __init__(self):
+            self.show_report_info = False
+            self.show_report_operator = False
+            self.show_report_warning = False
+            self.show_report_error = False
+
+        @property
+        def show_report_debug(self):
+            return False
+
+        @show_report_debug.setter
+        def show_report_debug(self, _value):
+            raise RuntimeError("locked")
+
+    locked_space = SetterLockedSpace()
+    common._enable_info_filters(SimpleNamespace(spaces=SimpleNamespace(active=locked_space)))
+    assert locked_space.show_report_info is True
+    assert locked_space.show_report_operator is True
+    assert locked_space.show_report_warning is True
+    assert locked_space.show_report_error is True
+
+    common.bpy.context.window_manager.windows = [
+        SimpleNamespace(screen=None),
+        SimpleNamespace(screen=SimpleNamespace(areas=[])),
+    ]
+    assert common._copy_info_reports_with_temp_area() == ""
+
+    class BrokenOperators:
+        def __iter__(self):
+            raise RuntimeError("boom")
+
+    with mock.patch.object(common, "_log", side_effect=logs.append):
+        common.bpy.context.window_manager.operators = BrokenOperators()
+        assert common._operator_snapshot_lines(5) == ""
+
+    assert any("Operator fallback failed" in message for message in logs)
+
+
+def test_common_probe_helpers_cover_remaining_platform_and_cleanup_paths():
+    modules = load_suzanne_modules()
+    common = modules.common
+
+    with mock.patch.object(common.platform, "system", return_value="Linux"):
+        linux_candidates = common._microphone_probe_candidates("ffmpeg", "probe.wav")
+    assert linux_candidates[0][:5] == ["ffmpeg", "-nostdin", "-f", "alsa", "-i"]
+    assert linux_candidates[1][:5] == ["ffmpeg", "-nostdin", "-f", "pulse", "-i"]
+
+    with mock.patch.object(common.platform, "system", return_value="Plan9"):
+        fallback_candidates = common._microphone_probe_candidates("ffmpeg", "probe.wav")
+    assert fallback_candidates == [
+        ["ffmpeg", "-nostdin", "-f", "alsa", "-i", "default", "-t", "0.40", "-ac", "1", "-ar", "16000", "-y", "probe.wav"]
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        addon_dir = pathlib.Path(tmpdir)
+        with mock.patch.object(common.platform, "system", return_value="Darwin"):
+            with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+                ok, detail = common._run_microphone_probe()
+        assert ok is False
+        assert detail == "atunc is not installed."
+
+        atunc_path = addon_dir / "atunc" / "atunc"
+        atunc_path.parent.mkdir(parents=True, exist_ok=True)
+        atunc_path.write_text("", encoding="utf-8")
+
+        with mock.patch.object(common.platform, "system", return_value="Darwin"):
+            with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+                with mock.patch.object(common, "_get_audio_devices_macos", return_value=[]):
+                    ok, detail = common._run_microphone_probe()
+        assert ok is False
+        assert detail == "No macOS audio devices were detected."
+
+        with mock.patch.object(common.platform, "system", return_value="Darwin"):
+            with mock.patch.object(common, "_addon_dir", return_value=addon_dir):
+                with mock.patch.object(
+                    common,
+                    "_get_audio_devices_macos",
+                    return_value=[("7", "Built-in Mic", "Built-in Mic")],
+                ):
+                    ok, detail = common._run_microphone_probe()
+        assert ok is True
+        assert detail == "atunc found with 1 detected device(s)."
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        probe_path = pathlib.Path(tmpdir) / "probe.wav"
+        probe_path.write_bytes(b"")
+
+        class TempHandle:
+            def __enter__(self):
+                return SimpleNamespace(name=str(probe_path))
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with mock.patch.object(common.platform, "system", return_value="Windows"):
+            with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+                with mock.patch.object(common.tempfile, "NamedTemporaryFile", return_value=TempHandle()):
+                    with mock.patch.object(common, "_microphone_probe_candidates", return_value=[["ffmpeg"]]):
+                        with mock.patch.object(common.subprocess, "run", side_effect=RuntimeError("boom")):
+                            ok, detail = common._run_microphone_probe()
+        assert ok is False
+        assert detail == "boom"
+        if probe_path.exists():
+            probe_path.unlink()
+
+        probe_path.write_bytes(b"")
+        with mock.patch.object(common.platform, "system", return_value="Windows"):
+            with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+                with mock.patch.object(common.tempfile, "NamedTemporaryFile", return_value=TempHandle()):
+                    with mock.patch.object(common, "_microphone_probe_candidates", return_value=[["ffmpeg"]]):
+                        with mock.patch.object(
+                            common.subprocess,
+                            "run",
+                            return_value=SimpleNamespace(returncode=1, stderr=b"probe failed\n"),
+                        ):
+                            with mock.patch.object(common.os, "remove", side_effect=OSError("locked")):
+                                ok, detail = common._run_microphone_probe()
+        assert ok is False
+        assert detail == "probe failed"
+        if probe_path.exists():
+            probe_path.unlink()
+
+        probe_path.write_bytes(b"")
+        with mock.patch.object(common.platform, "system", return_value="Windows"):
+            with mock.patch.object(common, "_resolve_ffmpeg_path", return_value="ffmpeg"):
+                with mock.patch.object(common.tempfile, "NamedTemporaryFile", return_value=TempHandle()):
+                    with mock.patch.object(common, "_microphone_probe_candidates", return_value=[["ffmpeg"]]):
+                        with mock.patch.object(
+                            common.subprocess,
+                            "run",
+                            return_value=SimpleNamespace(returncode=0, stderr=b""),
+                        ):
+                            with mock.patch.object(common.os.path, "getsize", return_value=100):
+                                ok, detail = common._run_microphone_probe()
+        assert ok is True
+        assert detail == "Microphone capture probe succeeded."
+        if probe_path.exists():
+            probe_path.unlink()
+
+
+def test_common_storage_and_conversation_helpers_cover_remaining_error_paths():
+    modules = load_suzanne_modules()
+    common = modules.common
+    logs = []
+
+    class FailingDir:
+        def mkdir(self, *args, **kwargs):
+            raise OSError("nope")
+
+    with mock.patch.object(common, "_recordings_dir", return_value=FailingDir()):
+        with mock.patch.object(common, "_log", side_effect=logs.append):
+            assert common._ensure_recordings_dir() is False
+
+    class FailingAddonPath:
+        def __truediv__(self, _name):
+            return self
+
+        def mkdir(self, *args, **kwargs):
+            raise OSError("nope")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with mock.patch.object(common, "_addon_dir", return_value=FailingAddonPath()):
+            with mock.patch.object(common.tempfile, "gettempdir", return_value=tmpdir):
+                with mock.patch.object(common, "_log", side_effect=logs.append):
+                    fallback_dir = common._conversation_storage_dir()
+    assert fallback_dir.name == "suzanne_va_data"
+
+    assert common._clip_text("", 10) == ""
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls):
+            return cls()
+
+        def strftime(self, _fmt):
+            return "2026-03-03 20:00"
+
+    with mock.patch.object(common.datetime, "datetime", FixedDateTime):
+        assert common._conversation_title_from_seed("") == "Conversation 2026-03-03 20:00"
+
+    assert common._normalize_conversation(None) is None
+    assert common._normalize_conversation({"id": ""}) is None
+
+    class ReadFailPath:
+        def exists(self):
+            return True
+
+        def read_text(self, encoding):
+            raise ValueError("bad json")
+
+    with mock.patch.object(common, "_conversation_store_path", return_value=ReadFailPath()):
+        with mock.patch.object(common, "_log", side_effect=logs.append):
+            assert common._load_conversation_store() == common._empty_conversation_store()
+
+    class NonDictPath:
+        def exists(self):
+            return True
+
+        def read_text(self, encoding):
+            return "[]"
+
+    with mock.patch.object(common, "_conversation_store_path", return_value=NonDictPath()):
+        assert common._load_conversation_store() == common._empty_conversation_store()
+
+    class TmpFailPath:
+        def __init__(self):
+            self.suffix = ".json"
+            self.tmp = self
+
+        def with_suffix(self, _suffix):
+            return self.tmp
+
+        def write_text(self, *args, **kwargs):
+            raise OSError("disk full")
+
+        def exists(self):
+            return True
+
+        def unlink(self):
+            raise OSError("locked")
+
+    with mock.patch.object(common, "_conversation_store_path", return_value=TmpFailPath()):
+        with mock.patch.object(common, "_log", side_effect=logs.append):
+            assert common._save_conversation_store({"conversations": []}) is False
+
+    assert common._find_conversation({"conversations": []}, "") is None
+
+    class LockedScene:
+        @property
+        def suzanne_va_active_conversation(self):
+            return ""
+
+        @suzanne_va_active_conversation.setter
+        def suzanne_va_active_conversation(self, _value):
+            raise RuntimeError("locked")
+
+    common._set_active_conversation(LockedScene(), "abc")
+
+    no_conv_scene = SimpleNamespace(suzanne_va_active_conversation=common._NO_CONVERSATION_ID)
+    assert common._sync_active_conversation(no_conv_scene, {"conversations": []}) == common._NO_CONVERSATION_ID
+
+    empty_scene = SimpleNamespace(suzanne_va_active_conversation="")
+    assert common._sync_active_conversation(empty_scene, {"conversations": []}) == common._NO_CONVERSATION_ID
+    assert empty_scene.suzanne_va_active_conversation == common._NO_CONVERSATION_ID
+
+    create_scene = SimpleNamespace(suzanne_va_active_conversation="")
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        with mock.patch.object(common, "_sync_active_conversation", return_value=common._NO_CONVERSATION_ID):
+            with mock.patch.object(common, "_save_conversation_store", return_value=False):
+                with mock.patch.object(common, "_now_iso_timestamp", return_value="2026-03-03T20:00:00"):
+                    with mock.patch.object(common.uuid, "uuid4", return_value=SimpleNamespace(hex="abc123")):
+                        conversation, store = common._get_active_conversation(
+                            create_scene,
+                            create_if_missing=True,
+                            title_seed="Hello",
+                        )
+    assert conversation["id"] == "abc123"
+    assert len(store["conversations"]) == 1
+
+    with mock.patch.object(
+        common,
+        "_load_conversation_store",
+        return_value={
+            "conversations": [
+                {"id": " ", "title": "Hidden", "messages": [], "updated_at": ""},
+                {"id": "abc", "title": "Shown", "messages": [], "updated_at": ""},
+            ]
+        },
+    ):
+        enum_items = common._conversation_enum_items(None, None)
+    assert len(enum_items) == 2
+    assert enum_items[1][0] == "abc"
+
+    disabled_scene = SimpleNamespace(suzanne_va_use_conversation_context=False)
+    assert common._conversation_context_block(disabled_scene) == ""
+
+    enabled_scene = SimpleNamespace(suzanne_va_use_conversation_context=True, suzanne_va_context_turns=1)
+    with mock.patch.object(common, "_get_active_conversation", return_value=(None, {})):
+        assert common._conversation_context_block(enabled_scene) == ""
+    with mock.patch.object(
+        common,
+        "_get_active_conversation",
+        return_value=({"messages": [{"role": "user", "text": "   "}]}, {}),
+    ):
+        assert common._conversation_context_block(enabled_scene) == ""
+
+    with mock.patch.object(common, "_get_addon_preferences", return_value=None):
+        with mock.patch.object(common, "_get_active_conversation", return_value=(None, {})):
+            assert common._append_conversation_exchange(SimpleNamespace(), "User", "Assistant", "text") is False
+
+    long_messages = [
+        {"role": "user", "text": f"Message {index}", "source": "text", "timestamp": "t"}
+        for index in range(401)
+    ]
+    trimmed_conversation = {"title": "", "messages": list(long_messages)}
+    with mock.patch.object(common, "_get_addon_preferences", return_value=None):
+        with mock.patch.object(common, "_get_active_conversation", return_value=(trimmed_conversation, {"conversations": []})):
+            with mock.patch.object(common, "_now_iso_timestamp", return_value="2026-03-03T20:00:00"):
+                with mock.patch.object(common, "_save_conversation_store", return_value=True):
+                    assert common._append_conversation_exchange(SimpleNamespace(), "User", "Assistant", "text") is True
+    assert len(trimmed_conversation["messages"]) == 400
+
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        with mock.patch.object(common, "_save_conversation_store", return_value=False):
+            with mock.patch.object(common, "_now_iso_timestamp", return_value="2026-03-03T20:00:00"):
+                with mock.patch.object(common.uuid, "uuid4", return_value=SimpleNamespace(hex="new123")):
+                    assert common._new_conversation(SimpleNamespace(), title_seed="Hello") is None
+
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        assert common._rename_conversation(SimpleNamespace(suzanne_va_active_conversation=""), "Title") is False
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        assert common._rename_conversation(SimpleNamespace(suzanne_va_active_conversation="abc"), "Title") is False
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": [{"id": "abc"}]}):
+        with mock.patch.object(common, "_find_conversation", return_value={"id": "abc"}):
+            assert common._rename_conversation(SimpleNamespace(suzanne_va_active_conversation="abc"), "   ") is False
+
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        assert common._delete_active_conversation(SimpleNamespace(suzanne_va_active_conversation="")) is False
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        assert common._delete_active_conversation(SimpleNamespace(suzanne_va_active_conversation="abc")) is False
+    with mock.patch.object(
+        common,
+        "_load_conversation_store",
+        return_value={"conversations": [{"id": "abc"}]},
+    ):
+        with mock.patch.object(common, "_save_conversation_store", return_value=False):
+            assert common._delete_active_conversation(SimpleNamespace(suzanne_va_active_conversation="abc")) is False
+
+    with mock.patch.object(common, "_get_active_conversation", return_value=(None, {})):
+        assert common._conversation_preview_lines(SimpleNamespace()) == []
+    with mock.patch.object(common, "_get_active_conversation", return_value=({"messages": []}, {})):
+        assert common._conversation_preview_lines(SimpleNamespace()) == []
+
+    class TextHttpError:
+        def read(self):
+            return "plain text"
+
+    assert common._read_http_error_body(TextHttpError()) == "plain text"
+
+    with mock.patch.object(common.mimetypes, "guess_type", return_value=(None, None)):
+        with mock.patch.object(common, "_read_file_bytes", return_value=b"abc"):
+            with mock.patch.object(common, "_post_multipart", return_value='{"text": ""}') as post_multipart:
+                common._transcribe_audio("sk-live", "whisper-1", "recording.unknown")
+    files_arg = post_multipart.call_args.args[3]
+    assert files_arg["file"][1] == "audio/wav"
+
+    assert any("Could not create recordings dir" in message for message in logs)
+    assert any("Could not create data dir" in message for message in logs)
+    assert any("Could not read conversations file" in message for message in logs)
+    assert any("Could not save conversations file" in message for message in logs)
+
+
+def test_common_path_and_creation_helpers_cover_remaining_success_paths():
+    modules = load_suzanne_modules()
+    common = modules.common
+
+    addon_dir = common._addon_dir()
+    assert addon_dir.name == "suzanne"
+    assert common._recordings_dir() == addon_dir / "recordings"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        recordings_dir = pathlib.Path(tmpdir) / "recordings"
+        with mock.patch.object(common, "_recordings_dir", return_value=recordings_dir):
+            assert common._ensure_recordings_dir() is True
+        assert recordings_dir.exists()
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls):
+            return cls()
+
+        def strftime(self, _fmt):
+            return "2026-03-03_20-00-00"
+
+    with mock.patch.object(common.datetime, "datetime", FixedDateTime):
+        assert common._now_timestamp() == "2026-03-03_20-00-00"
+
+    scene = SimpleNamespace(suzanne_va_active_conversation="")
+    with mock.patch.object(common, "_load_conversation_store", return_value={"conversations": []}):
+        with mock.patch.object(common, "_sync_active_conversation", return_value=common._NO_CONVERSATION_ID):
+            with mock.patch.object(common, "_save_conversation_store", return_value=True):
+                with mock.patch.object(common, "_now_iso_timestamp", return_value="2026-03-03T20:00:00"):
+                    with mock.patch.object(common.uuid, "uuid4", return_value=SimpleNamespace(hex="saved123")):
+                        with mock.patch.object(common, "_set_active_conversation") as set_active:
+                            conversation, store = common._get_active_conversation(
+                                scene,
+                                create_if_missing=True,
+                                title_seed="Hello",
+                            )
+
+    assert conversation["id"] == "saved123"
+    assert len(store["conversations"]) == 1
+    set_active.assert_called_once_with(scene, "saved123")
