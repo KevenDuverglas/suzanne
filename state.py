@@ -1,6 +1,3 @@
-from bpy.props import CollectionProperty
-from bpy.types import PropertyGroup
-
 from .common import *  # noqa: F403,F401
 
 # --------------------------- state -----------------------------
@@ -26,20 +23,7 @@ _SCENE_PROP_NAMES = (
     "suzanne_va_output_view",
     "suzanne_va_expand_transcript",
     "suzanne_va_expand_response",
-    "suzanne_va_conversation_preview",
-    "suzanne_va_conversation_preview_index",
 )
-
-
-class SUZANNEVA_PG_conversation_preview_item(PropertyGroup):
-    label: StringProperty(
-        name="Conversation Preview Line",
-        default="",
-    )
-    is_placeholder: BoolProperty(
-        name="Placeholder Row",
-        default=False,
-    )
 
 
 def ensure_props():
@@ -157,18 +141,6 @@ def ensure_props():
             name="Expand Response",
             default=False,
         )
-    if not hasattr(sc, "suzanne_va_conversation_preview"):
-        sc.suzanne_va_conversation_preview = CollectionProperty(
-            name="Conversation Preview",
-            type=SUZANNEVA_PG_conversation_preview_item,
-        )
-    if not hasattr(sc, "suzanne_va_conversation_preview_index"):
-        sc.suzanne_va_conversation_preview_index = IntProperty(
-            name="Conversation Preview Index",
-            default=0,
-            min=0,
-        )
-
 
 def clear_props():
     sc = bpy.types.Scene

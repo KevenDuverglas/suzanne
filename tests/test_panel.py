@@ -1,7 +1,6 @@
-from types import SimpleNamespace
 from unittest import mock
 
-from tests.test_support import FakeCollection, LayoutRecorder, load_suzanne_modules, make_context, make_scene
+from tests.test_support import LayoutRecorder, load_suzanne_modules, make_context, make_scene
 
 
 def test_panel_status_presentation_maps_common_states():
@@ -59,37 +58,23 @@ def test_panel_draw_delegates_to_all_section_renderers():
     draw_latest.assert_called_once_with(sidebar.layout, scene)
 
 
-def test_panel_sync_conversation_preview_uses_placeholder_when_no_conversation_exists():
+def test_panel_conversation_preview_rows_uses_placeholder_when_no_conversation_exists():
     modules = load_suzanne_modules()
     sidebar = modules.panel.SUZANNEVA_PT_sidebar()
-    preview_items = FakeCollection()
     scene = make_scene(
-        suzanne_va_conversation_preview=preview_items,
-        suzanne_va_conversation_preview_index=5,
         suzanne_va_active_conversation="",
     )
 
     with mock.patch.object(modules.panel, "_conversation_preview_lines", return_value=[]):
-        sidebar._sync_conversation_preview(scene)
+        rows = sidebar._conversation_preview_rows(scene)
 
-    assert len(preview_items) == 1
-    assert preview_items[0].label == "No conversation yet. Create one or send a prompt."
-    assert preview_items[0].is_placeholder is True
-    assert scene.suzanne_va_conversation_preview_index == 0
+    assert rows == [("No conversation yet. Create one or send a prompt.", True)]
 
 
-def test_panel_sync_conversation_preview_reuses_real_preview_lines_and_trims_rows():
+def test_panel_conversation_preview_rows_reuses_real_preview_lines():
     modules = load_suzanne_modules()
     sidebar = modules.panel.SUZANNEVA_PT_sidebar()
-    preview_items = FakeCollection(
-        [
-            SimpleNamespace(label="old 1", is_placeholder=True),
-            SimpleNamespace(label="old 2", is_placeholder=True),
-            SimpleNamespace(label="old 3", is_placeholder=True),
-        ]
-    )
     scene = make_scene(
-        suzanne_va_conversation_preview=preview_items,
         suzanne_va_active_conversation="conv-1",
     )
 
@@ -98,60 +83,13 @@ def test_panel_sync_conversation_preview_reuses_real_preview_lines_and_trims_row
         "_conversation_preview_lines",
         return_value=["You: Hi", "Suzanne: Hello"],
     ):
-        sidebar._sync_conversation_preview(scene)
+        rows = sidebar._conversation_preview_rows(scene)
 
-    assert len(preview_items) == 2
-    assert preview_items[0].label == "You: Hi"
-    assert preview_items[0].is_placeholder is False
-    assert preview_items[1].label == "Suzanne: Hello"
-    assert preview_items[1].is_placeholder is False
+    assert rows == [("You: Hi", False), ("Suzanne: Hello", False)]
 
 
-def test_panel_preview_list_poll_and_header_cover_basic_ui_branches():
+def test_panel_poll_and_header_cover_basic_ui_branches():
     modules = load_suzanne_modules()
-    preview = modules.panel.SUZANNEVA_UL_conversation_preview()
-
-    grid_layout = LayoutRecorder()
-    preview.layout_type = "GRID"
-    preview.draw_item(
-        None,
-        grid_layout,
-        None,
-        SimpleNamespace(label="Ignored", is_placeholder=False),
-        None,
-        None,
-        None,
-    )
-    assert grid_layout.alignment == "CENTER"
-    assert grid_layout.calls[0][1]["text"] == ""
-
-    placeholder_layout = LayoutRecorder()
-    preview.layout_type = "DEFAULT"
-    preview.draw_item(
-        None,
-        placeholder_layout,
-        None,
-        SimpleNamespace(label="Placeholder", is_placeholder=True),
-        None,
-        None,
-        None,
-    )
-    placeholder_row = placeholder_layout.children[0]
-    assert placeholder_row.enabled is False
-    assert "Placeholder" in placeholder_layout.label_texts()
-
-    normal_layout = LayoutRecorder()
-    preview.draw_item(
-        None,
-        normal_layout,
-        None,
-        SimpleNamespace(label="Normal", is_placeholder=False),
-        None,
-        None,
-        None,
-    )
-    assert "Normal" in normal_layout.label_texts()
-
     sidebar = modules.panel.SUZANNEVA_PT_sidebar()
     view_context = make_context(modules.common.ADDON_MODULE, scene=make_scene(suzanne_va_mic_active=True))
     non_view_context = make_context(modules.common.ADDON_MODULE)
@@ -185,12 +123,11 @@ def test_panel_draw_cards_render_controls_and_empty_states():
     assert "Context" in context_layout.label_texts()
 
     conversation_layout = LayoutRecorder()
-    with mock.patch.object(sidebar, "_sync_conversation_preview") as sync_preview:
-        sidebar._draw_conversation_card(conversation_layout, scene)
-    sync_preview.assert_called_once_with(scene)
+    sidebar._draw_conversation_card(conversation_layout, scene)
     assert modules.operators.SUZANNEVA_OT_new_conversation.bl_idname in conversation_layout.operator_ids()
     assert modules.operators.SUZANNEVA_OT_rename_conversation.bl_idname in conversation_layout.operator_ids()
     assert modules.operators.SUZANNEVA_OT_delete_conversation.bl_idname in conversation_layout.operator_ids()
+    assert "No conversation yet. Create one or send a prompt." in conversation_layout.label_texts()
 
     voice_layout = LayoutRecorder()
     sidebar._draw_voice_card(voice_layout, scene, False)
@@ -251,14 +188,9 @@ def test_panel_covers_collapsed_cards_and_remaining_status_fallbacks():
         False,
     )
 
-    preview_items = FakeCollection()
-    preview_scene = make_scene(
-        suzanne_va_conversation_preview=preview_items,
-        suzanne_va_active_conversation="conv-1",
-    )
     with mock.patch.object(modules.panel, "_conversation_preview_lines", return_value=[]):
-        sidebar._sync_conversation_preview(preview_scene)
-    assert preview_items[0].label == "No saved messages yet. Start by asking a question."
+        rows = sidebar._conversation_preview_rows(make_scene(suzanne_va_active_conversation="conv-1"))
+    assert rows == [("No saved messages yet. Start by asking a question.", True)]
 
     ask_layout = LayoutRecorder(collapsed_props={"suzanne_va_show_message"})
     sidebar._draw_ask_card(ask_layout, make_scene())

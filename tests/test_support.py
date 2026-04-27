@@ -116,25 +116,6 @@ def load_suzanne_modules():
     )
 
 
-class FakeCollection:
-    def __init__(self, items=None):
-        self._items = list(items or [])
-
-    def add(self):
-        item = SimpleNamespace(label="", is_placeholder=False)
-        self._items.append(item)
-        return item
-
-    def remove(self, index):
-        del self._items[index]
-
-    def __len__(self):
-        return len(self._items)
-
-    def __getitem__(self, index):
-        return self._items[index]
-
-
 class LayoutRecorder:
     def __init__(self, collapsed_props=None):
         self.calls = []
@@ -238,8 +219,6 @@ def make_scene(**overrides):
         "suzanne_va_mic_active": False,
         "suzanne_va_context_turns": 4,
         "suzanne_va_active_conversation": "",
-        "suzanne_va_conversation_preview": FakeCollection(),
-        "suzanne_va_conversation_preview_index": 0,
         "suzanne_va_output_view": "response",
         "suzanne_va_show_message": True,
         "suzanne_va_show_context": True,

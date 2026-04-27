@@ -1,10 +1,20 @@
 # Suzanne Voice Assistant (Blender Add-on)
 
+[![Tests](https://github.com/KevenDuverglas/suzanne/actions/workflows/tests.yml/badge.svg)](https://github.com/KevenDuverglas/suzanne/actions/workflows/tests.yml)
+
 Suzanne Voice Assistant is a Blender sidebar add-on for Blender-focused text and voice help.
 
 Current version: `1.8.5`  
 Blender target: `5.0.0+`  
 Panel location: `3D Viewport > N-Panel > Suzanne`
+
+## Project Links
+
+- Tutorial video: `https://www.youtube.com/watch?v=euNIz9_TexI&t=305s`
+- Public Gumroad beta: `https://3179846307423.gumroad.com/l/suzanne-ai`
+- GitHub releases page: `https://github.com/KevenDuverglas/suzanne/releases`
+
+If your professor wants to see that the project is documented and publicly available, the tutorial video and Gumroad page give Suzanne a clear public-facing home in addition to the GitHub repository.
 
 ## What It Does
 
@@ -43,7 +53,15 @@ No external Python package install is required for this version. The add-on uses
 
 ## Install
 
-### Option 1: Install from GitHub ZIP (recommended)
+### Option 1: Install from Gumroad ZIP (recommended public beta)
+
+1. Download the current Suzanne package from Gumroad:
+   - `https://3179846307423.gumroad.com/l/suzanne-ai`
+2. In Blender, go to `Edit > Preferences > Add-ons > Install...`
+3. Select the downloaded ZIP file.
+4. Enable `Suzanne Voice Assistant`.
+
+### Option 2: Install from GitHub ZIP
 
 1. Open the GitHub repository page for this add-on.
 2. Click `Code > Download ZIP`.
@@ -64,7 +82,7 @@ Expected structure in the downloaded ZIP:
   state.py
 ```
 
-### Option 2: Install from folder (development)
+### Option 3: Install from folder (development)
 
 1. Copy the `suzanne` folder into Blender add-ons directory:
    - Linux: `~/.config/blender/<version>/scripts/addons/`
@@ -100,6 +118,28 @@ Expected structure in the downloaded ZIP:
 2. Click again to stop recording.
 3. Add-on transcribes audio and sends it automatically.
 4. Read result under `Latest Output`.
+
+## Demo and Release Notes
+
+Suzanne has both a public walkthrough and a public download page:
+
+- The YouTube tutorial shows the add-on inside Blender and demonstrates the intended workflow:
+  - `https://www.youtube.com/watch?v=euNIz9_TexI&t=305s`
+- The Gumroad page acts as the public beta distribution point:
+  - `https://3179846307423.gumroad.com/l/suzanne-ai`
+
+For instructors, reviewers, or users visiting the repository, these links show that Suzanne is not just source code. It also has a tutorial artifact and a public distribution page.
+
+## Development and CI
+
+This repository includes an automated GitHub Actions workflow so pushes and pull requests can run the test suite and show a status check on GitHub.
+
+To run the same tests locally:
+
+1. Install development dependencies:
+   - `python -m pip install -r requirements.txt`
+2. Run the suite from the repository root:
+   - `python -m pytest -q`
 
 ## Local Data Storage
 

@@ -12,10 +12,6 @@ def test_state_ensure_props_registers_expected_scene_properties_and_is_idempoten
     assert scene_type.suzanne_va_context_turns["min"] == 1
     assert scene_type.suzanne_va_context_turns["max"] == 20
     assert scene_type.suzanne_va_output_view["default"] == "response"
-    assert (
-        scene_type.suzanne_va_conversation_preview["type"]
-        is modules.state.SUZANNEVA_PG_conversation_preview_item
-    )
 
     modules.state.ensure_props()
 

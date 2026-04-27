@@ -1,5 +1,3 @@
-from bpy.types import UIList
-
 from .common import *  # noqa: F403,F401
 from .operators import (  # noqa: F401
     SUZANNEVA_OT_send_message,
@@ -10,35 +8,6 @@ from .operators import (  # noqa: F401
 )
 
 # ----------------------------- panel ---------------------------
-
-
-class SUZANNEVA_UL_conversation_preview(UIList):
-    bl_idname = "SUZANNEVA_UL_conversation_preview"
-
-    def draw_item(
-        self,
-        _context,
-        layout,
-        _data,
-        item,
-        _icon,
-        _active_data,
-        _active_propname,
-        _index=0,
-        _flt_flag=0,
-    ):
-        if self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon='TEXT')
-            return
-
-        row = layout.row(align=True)
-        if item.is_placeholder:
-            row.enabled = False
-            row.label(text=item.label, icon='INFO')
-            return
-
-        row.label(text=item.label, icon='TEXT')
 
 
 class SUZANNEVA_PT_sidebar(Panel):
@@ -99,8 +68,7 @@ class SUZANNEVA_PT_sidebar(Panel):
             False,
         )
 
-    def _sync_conversation_preview(self, scene):
-        preview_items = scene.suzanne_va_conversation_preview
+    def _conversation_preview_rows(self, scene):
         preview_lines = _conversation_preview_lines(
             scene,
             max_items=max(2, min(14, scene.suzanne_va_context_turns * 2)),
@@ -110,25 +78,10 @@ class SUZANNEVA_PT_sidebar(Panel):
         has_conversation = bool(active_conversation_id) and active_conversation_id != _NO_CONVERSATION_ID
 
         if preview_lines:
-            rows = [(line, False) for line in preview_lines]
-        elif has_conversation:
-            rows = [("No saved messages yet. Start by asking a question.", True)]
-        else:
-            rows = [("No conversation yet. Create one or send a prompt.", True)]
-
-        while len(preview_items) > len(rows):
-            preview_items.remove(len(preview_items) - 1)
-
-        for index, (label, is_placeholder) in enumerate(rows):
-            if index >= len(preview_items):
-                item = preview_items.add()
-            else:
-                item = preview_items[index]
-            item.label = label
-            item.is_placeholder = is_placeholder
-
-        if scene.suzanne_va_conversation_preview_index >= len(preview_items):
-            scene.suzanne_va_conversation_preview_index = max(0, len(preview_items) - 1)
+            return [(line, False) for line in preview_lines]
+        if has_conversation:
+            return [("No saved messages yet. Start by asking a question.", True)]
+        return [("No conversation yet. Create one or send a prompt.", True)]
 
     def _draw_status_card(self, layout, scene, is_recording):
         title, detail, icon_name, is_alert = self._status_presentation(scene, is_recording)
@@ -201,17 +154,11 @@ class SUZANNEVA_PT_sidebar(Panel):
         delete_row.enabled = has_conversation
         delete_row.operator(SUZANNEVA_OT_delete_conversation.bl_idname, text="", icon='TRASH')
 
-        self._sync_conversation_preview(scene)
-        preview_rows = max(3, min(7, len(scene.suzanne_va_conversation_preview)))
-        conversation_col.template_list(
-            SUZANNEVA_UL_conversation_preview.bl_idname,
-            "",
-            scene,
-            "suzanne_va_conversation_preview",
-            scene,
-            "suzanne_va_conversation_preview_index",
-            rows=preview_rows,
-        )
+        preview_box = conversation_col.box()
+        for label, is_placeholder in self._conversation_preview_rows(scene):
+            preview_row = preview_box.row(align=True)
+            preview_row.enabled = not is_placeholder
+            preview_row.label(text=label, icon='INFO' if is_placeholder else 'TEXT')
         layout.separator()
 
     def _draw_voice_card(self, layout, scene, is_recording):

@@ -15,7 +15,7 @@ except ModuleNotFoundError:
 
 if bpy is not None:
     from .common import _ensure_recordings_dir
-    from .state import ensure_props, clear_props, SUZANNEVA_PG_conversation_preview_item
+    from .state import ensure_props, clear_props
     from .preferences import SUZANNEVA_Preferences
     from .operators import (
         SUZANNEVA_OT_microphone_press,
@@ -32,10 +32,9 @@ if bpy is not None:
         SUZANNEVA_OT_rename_conversation,
         SUZANNEVA_OT_delete_conversation,
     )
-    from .panel import SUZANNEVA_PT_sidebar, SUZANNEVA_UL_conversation_preview
+    from .panel import SUZANNEVA_PT_sidebar
 
     classes = (
-        SUZANNEVA_PG_conversation_preview_item,
         SUZANNEVA_Preferences,
         SUZANNEVA_OT_microphone_press,
         SUZANNEVA_OT_test_api_key,
@@ -50,7 +49,6 @@ if bpy is not None:
         SUZANNEVA_OT_new_conversation,
         SUZANNEVA_OT_rename_conversation,
         SUZANNEVA_OT_delete_conversation,
-        SUZANNEVA_UL_conversation_preview,
         SUZANNEVA_PT_sidebar,
     )
 else:
