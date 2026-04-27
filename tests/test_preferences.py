@@ -29,7 +29,7 @@ def test_preferences_draw_masks_api_key_and_renders_diagnostics_controls():
     labels = prefs.layout.label_texts()
     operator_ids = prefs.layout.operator_ids()
 
-    assert "Suzanne Version 1.8.5" in labels
+    assert "Suzanne Version 1.0.0" in labels
     assert any(label.startswith("API Key: ") for label in labels)
     assert "Last Result" in labels
     assert "Last Error" in labels

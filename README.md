@@ -4,7 +4,7 @@
 
 Suzanne Voice Assistant is a Blender sidebar add-on for Blender-focused text and voice help.
 
-Current version: `1.8.5`  
+Current version: `1.0.0`  
 Blender target: `5.0.0+`  
 Panel location: `3D Viewport > N-Panel > Suzanne`
 
@@ -94,7 +94,7 @@ Expected structure in the downloaded ZIP:
 ## First-Time Setup
 
 1. Open add-on preferences.
-2. Confirm the preferences panel shows `Suzanne Version 1.8.5` and `Compatible with Blender 5.0.0 and newer`.
+2. Confirm the preferences panel shows `Suzanne Version 1.0.0` and `Compatible with Blender 5.0.0 and newer`.
 3. Paste your OpenAI API key.
 4. Choose:
    - `ChatGPT Model` (default usually `gpt-4o-mini`)
